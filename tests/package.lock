@@ -1,0 +1,9 @@
+prefixes:
+  nfc-parser: toit-nfc-parser
+packages:
+  toit-nfc:
+    path: ../../toit-nfc
+  toit-nfc-parser:
+    path: ..
+    prefixes:
+      nfc: toit-nfc

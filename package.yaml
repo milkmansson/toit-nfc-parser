@@ -1,0 +1,5 @@
+name: nfc-parser
+description: Hardware-free parsing of NFC/RFID card data — NDEF, TLV, MAD, card-type identification, Flipper .nfc import/export.
+dependencies:
+  nfc:
+    path: ../toit-nfc
