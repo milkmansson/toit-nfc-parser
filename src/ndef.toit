@@ -134,13 +134,24 @@ class NdefMessage:
   /**
   Parses $bytes as an NDEF message.
 
-  Throws if a record is chunked (the continuation-fragment mechanism for
-    very large payloads): that is not supported here.
+  Chunked records (the continuation-fragment mechanism for payloads too
+    large to encode in one record) are reassembled transparently: the
+    returned $NdefRecord carries the chunks' concatenated payload, with
+    the type/ID taken from the chunk sequence's first chunk, same as an
+    unchunked record. $to-byte-array, in the other direction, never
+    produces chunked output — none of this package's own in-memory
+    payloads need it.
   */
   static parse bytes/ByteArray -> NdefMessage:
     records := []
     index := 0
     first := true
+    chunking := false
+    chunk-tnf := 0
+    chunk-type := #[]
+    chunk-id := #[]
+    chunk-payload := #[]
+
     while index < bytes.size:
       header := bytes[index++]
       mb := header & 0x80 != 0
@@ -152,7 +163,6 @@ class NdefMessage:
 
       if first and not mb: throw "First NDEF record must have the MB flag set"
       if not first and mb: throw "Only the first NDEF record may have the MB flag set"
-      if cf or tnf == NdefRecord.TNF-UNCHANGED: throw "Chunked NDEF records are not supported"
 
       type-length := bytes[index++]
       payload-length/int := ?
@@ -173,11 +183,29 @@ class NdefMessage:
       payload := bytes[index .. index + payload-length]
       index += payload-length
 
-      records.add (NdefRecord --tnf=tnf --type=type --id=id --payload=payload)
+      is-continuation := tnf == NdefRecord.TNF-UNCHANGED
+      if cf or chunking:
+        if not chunking:
+          if is-continuation: throw "Unexpected NDEF chunk continuation"
+          chunking = true
+          chunk-tnf = tnf
+          chunk-type = type
+          chunk-id = id
+          chunk-payload = payload
+        else:
+          if not is-continuation: throw "Expected an NDEF chunk continuation"
+          chunk-payload += payload
+        if not cf:
+          records.add (NdefRecord --tnf=chunk-tnf --type=chunk-type --id=chunk-id --payload=chunk-payload)
+          chunking = false
+      else:
+        if is-continuation: throw "Unexpected NDEF chunk continuation"
+        records.add (NdefRecord --tnf=tnf --type=type --id=id --payload=payload)
 
       first = false
       if me: break
 
+    if chunking: throw "Truncated NDEF chunk sequence"
     return NdefMessage records
 
   /** Encodes this message back to its wire format. */
